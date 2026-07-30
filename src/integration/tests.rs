@@ -1347,6 +1347,38 @@ fn install_claude_does_not_overwrite_invalid_settings() {
 }
 
 #[test]
+fn install_claude_does_not_overwrite_structurally_invalid_settings() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let claude_dir = base.join("custom-claude");
+    fs::create_dir_all(&claude_dir).unwrap();
+    let settings_path = claude_dir.join("settings.json");
+    std::env::set_var(CLAUDE_CONFIG_DIR_ENV_VAR, &claude_dir);
+
+    for (invalid_settings, expected_error) in [
+        ("[]", "claude settings at"),
+        (r#"{"hooks": []}"#, "claude settings hooks at"),
+        (
+            r#"{"hooks": {"SessionStart": {}}}"#,
+            "hook entries for SessionStart must be an array",
+        ),
+    ] {
+        fs::write(&settings_path, invalid_settings).unwrap();
+
+        let err = install_claude().unwrap_err().to_string();
+
+        assert!(err.contains(expected_error), "unexpected error: {err}");
+        assert_eq!(
+            fs::read_to_string(&settings_path).unwrap(),
+            invalid_settings
+        );
+    }
+
+    clear_integration_path_env();
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
 fn install_claude_errors_when_claude_dir_missing() {
     let _lock = integration_env_lock();
     let base = unique_base();
