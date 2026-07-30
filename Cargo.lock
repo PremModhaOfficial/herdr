@@ -592,6 +592,7 @@ dependencies = [
  "clap_complete",
  "crossterm",
  "ctrlc",
+ "indexmap",
  "interprocess",
  "libc",
  "png",

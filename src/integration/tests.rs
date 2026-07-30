@@ -924,6 +924,130 @@ fn install_claude_writes_hook_and_updates_settings() {
 }
 
 #[test]
+fn install_claude_preserves_settings_key_order_and_trailing_newline() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let claude_dir = base.join("custom-claude");
+    fs::create_dir_all(&claude_dir).unwrap();
+    let settings_path = claude_dir.join("settings.json");
+    fs::write(
+        &settings_path,
+        concat!(
+            "{\n",
+            "  \"zeta\": {\n",
+            "    \"second\": true,\n",
+            "    \"first\": false\n",
+            "  },\n",
+            "  \"hooks\": {},\n",
+            "  \"alpha\": 1\n",
+            "}\n",
+        ),
+    )
+    .unwrap();
+    std::env::set_var(CLAUDE_CONFIG_DIR_ENV_VAR, &claude_dir);
+
+    install_claude().unwrap();
+
+    let updated = fs::read_to_string(&settings_path).unwrap();
+    let parsed: Value = serde_json::from_str(&updated).unwrap();
+    assert_eq!(parsed["zeta"]["second"], true);
+    assert_eq!(parsed["zeta"]["first"], false);
+    assert_eq!(parsed["alpha"], 1);
+    let session_start = parsed["hooks"]["SessionStart"].as_array().unwrap();
+    assert_eq!(session_start.len(), 1);
+    assert_eq!(session_start[0]["matcher"], "*");
+    assert_eq!(session_start[0]["hooks"][0]["type"], "command");
+    assert_eq!(session_start[0]["hooks"][0]["timeout"], 10);
+    assert!(session_start[0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap()
+        .ends_with(" session"));
+
+    let zeta = updated.find("\"zeta\"").unwrap();
+    let second = updated.find("\"second\"").unwrap();
+    let first = updated.find("\"first\"").unwrap();
+    let hooks = updated.find("\"hooks\"").unwrap();
+    let alpha = updated.find("\"alpha\"").unwrap();
+    let mut shape_failures = Vec::new();
+    if !(zeta < hooks && hooks < alpha) {
+        shape_failures.push("top-level key order changed");
+    }
+    if second >= first {
+        shape_failures.push("nested key order changed");
+    }
+    if !updated.ends_with('\n') {
+        shape_failures.push("trailing newline was removed");
+    }
+    assert!(shape_failures.is_empty(), "{}", shape_failures.join(", "));
+
+    clear_integration_path_env();
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn install_claude_preserves_session_start_event_position_during_migration() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let claude_dir = base.join("custom-claude");
+    let hooks_dir = claude_dir.join("hooks");
+    fs::create_dir_all(&hooks_dir).unwrap();
+    let hook_path = hooks_dir.join(CLAUDE_HOOK_INSTALL_NAME);
+    let existing_command = hook_command(&hook_path, Some("session"));
+    let settings_path = claude_dir.join("settings.json");
+    fs::write(
+        &settings_path,
+        format!(
+            concat!(
+                "{{\n",
+                "  \"hooks\": {{\n",
+                "    \"SessionStart\": [{{\n",
+                "      \"matcher\": \"*\",\n",
+                "      \"hooks\": [{{\"type\": \"command\", \"command\": {}, \"timeout\": 10}}]\n",
+                "    }}],\n",
+                "    \"Notification\": [{{\"matcher\": \"keep\", \"hooks\": []}}]\n",
+                "  }}\n",
+                "}}\n",
+            ),
+            serde_json::to_string(&existing_command).unwrap(),
+        ),
+    )
+    .unwrap();
+    std::env::set_var(CLAUDE_CONFIG_DIR_ENV_VAR, &claude_dir);
+
+    install_claude().unwrap();
+
+    let updated = fs::read_to_string(&settings_path).unwrap();
+    let session_start = updated.find("\"SessionStart\"").unwrap();
+    let notification = updated.find("\"Notification\"").unwrap();
+    assert!(session_start < notification);
+    let parsed: Value = serde_json::from_str(&updated).unwrap();
+    assert_eq!(parsed["hooks"]["SessionStart"].as_array().unwrap().len(), 1);
+    assert_eq!(parsed["hooks"]["Notification"][0]["matcher"], "keep");
+
+    clear_integration_path_env();
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn install_claude_preserves_missing_trailing_newline() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let claude_dir = base.join("custom-claude");
+    fs::create_dir_all(&claude_dir).unwrap();
+    let settings_path = claude_dir.join("settings.json");
+    fs::write(&settings_path, r#"{"hooks": {}}"#).unwrap();
+    std::env::set_var(CLAUDE_CONFIG_DIR_ENV_VAR, &claude_dir);
+
+    install_claude().unwrap();
+
+    let updated = fs::read_to_string(&settings_path).unwrap();
+    assert!(!updated.ends_with('\n'));
+
+    clear_integration_path_env();
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
 fn install_claude_uses_claude_config_dir_env() {
     let _lock = integration_env_lock();
     let base = unique_base();
@@ -1196,6 +1320,29 @@ fn uninstall_claude_removes_herdr_hooks_and_preserves_others() {
     assert!(settings["hooks"].get("SessionEnd").is_none());
 
     std::env::remove_var("HOME");
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn install_claude_does_not_overwrite_invalid_settings() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let claude_dir = base.join("custom-claude");
+    fs::create_dir_all(&claude_dir).unwrap();
+    let settings_path = claude_dir.join("settings.json");
+    let invalid_settings = "{\n  invalid\n}\n";
+    fs::write(&settings_path, invalid_settings).unwrap();
+    std::env::set_var(CLAUDE_CONFIG_DIR_ENV_VAR, &claude_dir);
+
+    let err = install_claude().unwrap_err().to_string();
+
+    assert!(err.contains(&format!("failed to parse {}", settings_path.display())));
+    assert_eq!(
+        fs::read_to_string(&settings_path).unwrap(),
+        invalid_settings
+    );
+
+    clear_integration_path_env();
     let _ = fs::remove_dir_all(base);
 }
 
