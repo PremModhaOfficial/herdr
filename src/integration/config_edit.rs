@@ -832,7 +832,11 @@ pub(crate) fn build_jcode_config_with_hooks(content: &str, hook_path: &Path) -> 
             index += 1;
             continue;
         }
-        if in_hooks && JCODE_HOOK_EVENTS.iter().any(|event| is_toml_key(&lines[index], event)) {
+        if in_hooks
+            && JCODE_HOOK_EVENTS
+                .iter()
+                .any(|event| is_toml_key(&lines[index], event))
+        {
             // Drop the existing value so we never leave a duplicate key in the
             // table after inserting our block.
             lines.remove(index);

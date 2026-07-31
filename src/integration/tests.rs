@@ -1694,7 +1694,13 @@ fn install_jcode_is_idempotent_for_config_block() {
     for event in JCODE_HOOK_EVENTS {
         assert_eq!(
             hooks.get(event).and_then(toml::Value::as_str),
-            Some(jcode_dir.join("hooks").join(JCODE_HOOK_INSTALL_NAME).to_str().unwrap()),
+            Some(
+                jcode_dir
+                    .join("hooks")
+                    .join(JCODE_HOOK_INSTALL_NAME)
+                    .to_str()
+                    .unwrap()
+            ),
             "expected jcode {event} hook to remain wired"
         );
     }

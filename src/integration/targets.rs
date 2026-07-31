@@ -7,12 +7,11 @@ use serde_json::{json, Value};
 use super::command::{hook_command, shell_single_quote};
 use super::config_edit::{
     build_codex_config_with_hooks, build_jcode_config_with_hooks, build_kimi_config_with_hooks,
-    ensure_command_hook,
-    ensure_direct_command_hook, ensure_flat_command_hook, ensure_hermes_plugin_enabled,
-    ensure_hooks_object, ensure_simple_command_hook, hooks_object_if_present,
-    remove_direct_hook_commands, remove_flat_command_hook, remove_hermes_plugin_enabled,
-    remove_hook_commands, remove_jcode_config_block, remove_kimi_config_block,
-    remove_simple_command_hook,
+    ensure_command_hook, ensure_direct_command_hook, ensure_flat_command_hook,
+    ensure_hermes_plugin_enabled, ensure_hooks_object, ensure_simple_command_hook,
+    hooks_object_if_present, remove_direct_hook_commands, remove_flat_command_hook,
+    remove_hermes_plugin_enabled, remove_hook_commands, remove_jcode_config_block,
+    remove_kimi_config_block, remove_simple_command_hook,
 };
 use super::env::{
     claude_dir, codex_dir, copilot_dir, cursor_dir, devin_dir, droid_dir, grok_dir, hermes_dir,
@@ -28,10 +27,9 @@ use super::types::{
     DevinInstallPaths, DevinUninstallResult, DroidInstallPaths, DroidUninstallResult,
     GrokInstallPaths, GrokUninstallResult, HermesInstallPaths, HermesUninstallResult,
     JcodeInstallPaths, JcodeUninstallResult, KiloInstallPaths, KiloUninstallResult,
-    KimiInstallPaths, KimiUninstallResult,
-    MastracodeInstallPaths, MastracodeUninstallResult, OmpInstallPaths, OmpUninstallResult,
-    OpenCodeInstallPaths, OpenCodeUninstallResult, PiUninstallResult, QodercliInstallPaths,
-    QodercliUninstallResult,
+    KimiInstallPaths, KimiUninstallResult, MastracodeInstallPaths, MastracodeUninstallResult,
+    OmpInstallPaths, OmpUninstallResult, OpenCodeInstallPaths, OpenCodeUninstallResult,
+    PiUninstallResult, QodercliInstallPaths, QodercliUninstallResult,
 };
 use super::{
     CLAUDE_HOOK_ASSET, CLAUDE_HOOK_INSTALL_NAME, CODEX_HOOK_ASSET, CODEX_HOOK_INSTALL_NAME,
@@ -44,12 +42,11 @@ use super::{
     HERMES_PLUGIN_INIT_INSTALL_NAME, HERMES_PLUGIN_MANIFEST_ASSET,
     HERMES_PLUGIN_MANIFEST_INSTALL_NAME, JCODE_HOOK_ASSET, JCODE_HOOK_INSTALL_NAME,
     KILO_PLUGIN_ASSET, KILO_PLUGIN_INSTALL_NAME, KIMI_HOOK_ASSET, KIMI_HOOK_INSTALL_NAME,
-    MASTRACODE_HOOK_ASSET, MASTRACODE_HOOK_EVENTS,
-    MASTRACODE_HOOK_INSTALL_NAME, MASTRACODE_HOOK_TIMEOUT_MS, MASTRACODE_REMOVED_HOOK_EVENTS,
-    OMP_EXTENSION_ASSET, OMP_EXTENSION_INSTALL_NAME, OPENCODE_PLUGIN_ASSET,
-    OPENCODE_PLUGIN_INSTALL_NAME, PI_EXTENSION_ASSET, PI_EXTENSION_INSTALL_NAME,
-    QODERCLI_HOOK_ASSET, QODERCLI_HOOK_EVENTS, QODERCLI_HOOK_INSTALL_NAME,
-    QODERCLI_REMOVED_LIFECYCLE_HOOK_EVENTS,
+    MASTRACODE_HOOK_ASSET, MASTRACODE_HOOK_EVENTS, MASTRACODE_HOOK_INSTALL_NAME,
+    MASTRACODE_HOOK_TIMEOUT_MS, MASTRACODE_REMOVED_HOOK_EVENTS, OMP_EXTENSION_ASSET,
+    OMP_EXTENSION_INSTALL_NAME, OPENCODE_PLUGIN_ASSET, OPENCODE_PLUGIN_INSTALL_NAME,
+    PI_EXTENSION_ASSET, PI_EXTENSION_INSTALL_NAME, QODERCLI_HOOK_ASSET, QODERCLI_HOOK_EVENTS,
+    QODERCLI_HOOK_INSTALL_NAME, QODERCLI_REMOVED_LIFECYCLE_HOOK_EVENTS,
 };
 
 fn ensure_extension_dir(dir: &Path, agent: &str) -> io::Result<()> {
