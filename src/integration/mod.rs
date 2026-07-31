@@ -219,6 +219,20 @@ const GROK_HOOK_INSTALL_NAME: &str = "herdr-agent-state.sh";
 const GROK_HOOK_CONFIG_INSTALL_NAME: &str = "herdr.json";
 const GROK_HOOK_ASSET: &str = include_str!("assets/grok/herdr-agent-state.sh");
 const GROK_INTEGRATION_VERSION: u32 = 1;
+const JCODE_HOOK_INSTALL_NAME: &str = if cfg!(windows) {
+    "herdr-agent-state.ps1"
+} else {
+    "herdr-agent-state.sh"
+};
+const JCODE_HOOK_ASSET: &str = if cfg!(windows) {
+    include_str!("assets/jcode/herdr-agent-state.ps1")
+} else {
+    include_str!("assets/jcode/herdr-agent-state.sh")
+};
+const JCODE_INTEGRATION_VERSION: u32 = 1;
+const JCODE_CONFIG_BLOCK_BEGIN: &str = "# >>> herdr jcode integration";
+const JCODE_CONFIG_BLOCK_END: &str = "# <<< herdr jcode integration";
+const JCODE_HOOK_EVENTS: [&str; 4] = ["session_start", "turn_start", "turn_end", "session_end"];
 const INTEGRATION_VERSION_MARKER: &str = "HERDR_INTEGRATION_VERSION=";
 
 pub(crate) const INSTALL_WARNING_PREFIX: &str = "warning:";

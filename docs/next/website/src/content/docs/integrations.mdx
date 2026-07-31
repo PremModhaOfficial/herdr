@@ -1,6 +1,6 @@
 ---
 title: Integrations
-description: Install Herdr integrations for Pi, OMP, Claude Code, Codex, GitHub Copilot CLI, Devin CLI, Droid, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, Qoder CLI, Cursor Agent CLI, MastraCode, and Grok CLI.
+description: Install Herdr integrations for Pi, OMP, Claude Code, Codex, GitHub Copilot CLI, Devin CLI, Droid, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, Qoder CLI, Cursor Agent CLI, MastraCode, Grok CLI, and jcode.
 ---
 
 Herdr detects supported agents automatically. Official integrations can add native session identity for restore, lifecycle state reports, or both.
@@ -27,6 +27,7 @@ herdr integration install qodercli
 herdr integration install cursor
 herdr integration install mastracode
 herdr integration install grok
+herdr integration install jcode
 ```
 
 ## Uninstall integrations
@@ -47,6 +48,7 @@ herdr integration uninstall qodercli
 herdr integration uninstall cursor
 herdr integration uninstall mastracode
 herdr integration uninstall grok
+herdr integration uninstall jcode
 ```
 
 ## How Herdr uses integrations
@@ -55,14 +57,14 @@ Herdr uses integrations in two different ways:
 
 | Integration type | Agents | Effect |
 | --- | --- | --- |
-| Lifecycle authority | Pi, OMP, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, MastraCode | When installed and actively reporting for the pane, hook or plugin events author `idle`, `working`, and `blocked`. Herdr does not also use screen manifest fallback for that same lifecycle authority. |
-| Session identity | Claude Code, Codex, GitHub Copilot CLI, Devin CLI, Droid, Qoder CLI, Cursor Agent CLI, Grok CLI | The integration reports native session references for restore. State still comes from Herdr's screen manifest detection. |
+| Lifecycle authority | Pi, OMP, Kimi Code CLI, OpenCode, Kilo Code CLI, Hermes Agent, MastraCode, jcode | When installed and actively reporting for the pane, hook or plugin events author `idle`, `working`, and `blocked`. Herdr does not also use screen manifest fallback for that same lifecycle authority. |
+| Session identity | Claude Code, Codex, GitHub Copilot CLI, Devin CLI, Droid, Qoder CLI, Cursor Agent CLI, Grok CLI, jcode | The integration reports native session references for restore. State still comes from Herdr's screen manifest detection. |
 
 Custom socket integrations can also report state when they define state that is not visible in the native terminal UI.
 
-Some integrations report native agent session references. Herdr uses official session references to resume Claude Code, Codex, Devin CLI, Droid, Kimi Code CLI, Qoder CLI, Cursor Agent CLI, Grok CLI, GitHub Copilot CLI, Pi, OMP, Hermes Agent, OpenCode, Kilo Code CLI, and MastraCode panes after a Herdr server restart unless `[session] resume_agents_on_restore = false` disables it.
+Some integrations report native agent session references. Herdr uses official session references to resume Claude Code, Codex, Devin CLI, Droid, Kimi Code CLI, Qoder CLI, Cursor Agent CLI, Grok CLI, GitHub Copilot CLI, Pi, OMP, Hermes Agent, OpenCode, Kilo Code CLI, MastraCode, and jcode panes after a Herdr server restart unless `[session] resume_agents_on_restore = false` disables it.
 
-Native session restore requires current Herdr integrations: Pi integration version `2`, OMP version `3`, Claude Code version `6`, Codex version `5`, GitHub Copilot CLI version `2`, Devin CLI version `2`, Droid version `2`, Kimi Code CLI version `3`, Qoder CLI version `2`, Cursor Agent CLI version `1`, Grok CLI version `1`, OpenCode version `5`, Kilo Code CLI version `1`, Hermes Agent version `2`, or MastraCode version `1`. Check installed versions with `herdr integration status`.
+Native session restore requires current Herdr integrations: Pi integration version `2`, OMP version `3`, Claude Code version `6`, Codex version `5`, GitHub Copilot CLI version `2`, Devin CLI version `2`, Droid version `2`, Kimi Code CLI version `3`, Qoder CLI version `2`, Cursor Agent CLI version `1`, Grok CLI version `1`, jcode version `1`, OpenCode version `5`, Kilo Code CLI version `1`, Hermes Agent version `2`, or MastraCode version `1`. Check installed versions with `herdr integration status`.
 
 ## Pi
 
@@ -271,6 +273,18 @@ The hook reports session identity through Grok's `SessionStart` hook while Grok 
 Herdr uses `~/.grok` by default, or `GROK_HOME` when set. The Grok config directory must already exist. Grok merges every `hooks/*.json` file in that directory, so install writes a self-contained `hooks/herdr.json` with the Herdr `SessionStart` entry next to the `hooks/herdr-agent-state.sh` script, and never edits other hook files. Uninstall removes exactly those two Herdr-owned files.
 
 After Grok emits a session start event, Herdr can use the reported session id to resume the pane with `grok --resume <id>`.
+
+## jcode
+
+Install the jcode hook:
+
+```bash
+herdr integration install jcode
+```
+
+The hook bridges jcode's lifecycle hooks (`session_start`, `turn_start`, `turn_end`, `session_end`) to Herdr's socket API for authoritative `idle` and `working` status and native session identity. jcode has no human-approval blocking state in its TUI, so state is either `idle` or `working`.
+
+Herdr uses `~/.jcode` by default, or `JCODE_CONFIG_DIR` when set (a Herdr-level test seam only; jcode itself resolves its config home to `~/.jcode`). The jcode config directory must already exist. Install writes `hooks/herdr-agent-state.sh` and wires the four lifecycle events into the `[hooks]` table of `config.toml` inside a Herdr-managed block. jcode supports exactly one command per event, so Herdr takes over those four events and preserves other `[hooks]` keys. Uninstall removes the Herdr-managed block and deletes the hook script.
 
 ## Custom status labels
 

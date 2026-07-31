@@ -7,7 +7,8 @@ use super::command::{hook_command, legacy_bash_hook_command};
 #[cfg(windows)]
 use super::file_ops::legacy_bash_hook_path;
 use super::{
-    HERMES_PLUGIN_INSTALL_NAME, KIMI_CONFIG_BLOCK_BEGIN, KIMI_CONFIG_BLOCK_END, KIMI_HOOK_EVENTS,
+    HERMES_PLUGIN_INSTALL_NAME, JCODE_CONFIG_BLOCK_BEGIN, JCODE_CONFIG_BLOCK_END,
+    JCODE_HOOK_EVENTS, KIMI_CONFIG_BLOCK_BEGIN, KIMI_CONFIG_BLOCK_END, KIMI_HOOK_EVENTS,
 };
 
 pub(crate) fn ensure_hooks_object<'a>(
@@ -790,6 +791,117 @@ pub(crate) fn remove_kimi_config_block(content: &str) -> String {
             if line.trim() == KIMI_CONFIG_BLOCK_END {
                 in_block = false;
             }
+            continue;
+        }
+        lines.push(line.to_string());
+    }
+
+    if !removed_block {
+        return content.to_string();
+    }
+
+    let mut result = join_toml_lines(lines, trailing_newline);
+    while result.ends_with("\n\n") {
+        result.pop();
+    }
+    if result == "\n" {
+        String::new()
+    } else {
+        result
+    }
+}
+
+pub(crate) fn build_jcode_config_with_hooks(content: &str, hook_path: &Path) -> String {
+    let content = remove_jcode_config_block(content);
+    let trailing_newline = content.ends_with('\n');
+    let mut lines: Vec<String> = content.lines().map(str::to_string).collect();
+
+    // jcode's [hooks] table supports exactly one command per event, so the
+    // install takes over the four lifecycle events and documents ownership
+    // with a begin/end block. Other keys in [hooks] (pre_tool, post_tool,
+    // pre_tool_timeout_ms) are preserved.
+    let mut hooks_header_index = None;
+    let mut in_hooks = false;
+    let mut index = 0;
+    while index < lines.len() {
+        if let Some(header) = toml_table_header(&lines[index]) {
+            in_hooks = header == "[hooks]";
+            if in_hooks && hooks_header_index.is_none() {
+                hooks_header_index = Some(index);
+            }
+            index += 1;
+            continue;
+        }
+        if in_hooks && JCODE_HOOK_EVENTS.iter().any(|event| is_toml_key(&lines[index], event)) {
+            // Drop the existing value so we never leave a duplicate key in the
+            // table after inserting our block.
+            lines.remove(index);
+            continue;
+        }
+        index += 1;
+    }
+
+    let block = jcode_hook_block(hook_path);
+    let Some(header_index) = hooks_header_index else {
+        let mut result = join_toml_lines(lines, trailing_newline);
+        if !result.ends_with("\n\n") && !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str("[hooks]\n");
+        result.push_str(&block);
+        return result;
+    };
+
+    lines.insert(header_index + 1, block);
+    join_toml_lines(lines, trailing_newline)
+}
+
+fn jcode_hook_block(hook_path: &Path) -> String {
+    let command = hook_path.display().to_string();
+    let mut block = String::new();
+    block.push_str(JCODE_CONFIG_BLOCK_BEGIN);
+    block.push('\n');
+    for event in JCODE_HOOK_EVENTS {
+        block.push_str(&format!("{event} = {}\n", toml_basic_string(&command)));
+    }
+    block.push_str(JCODE_CONFIG_BLOCK_END);
+    block.push('\n');
+    block
+}
+
+pub(crate) fn remove_jcode_config_block(content: &str) -> String {
+    let trailing_newline = content.ends_with('\n');
+    let mut lines = Vec::new();
+    let mut in_block = false;
+    let mut in_hooks = false;
+    let mut removed_block = false;
+
+    for line in content.lines() {
+        if line.trim() == JCODE_CONFIG_BLOCK_BEGIN {
+            in_block = true;
+            removed_block = true;
+            continue;
+        }
+        if in_block {
+            if line.trim() == JCODE_CONFIG_BLOCK_END {
+                in_block = false;
+            }
+            continue;
+        }
+        if let Some(header) = toml_table_header(line) {
+            in_hooks = header == "[hooks]";
+            lines.push(line.to_string());
+            continue;
+        }
+        // Also drop herdr-owned event lines from an install without block
+        // markers (e.g. the manual dotfiles bridge) so uninstall is idempotent.
+        if in_hooks
+            && JCODE_HOOK_EVENTS
+                .iter()
+                .any(|event| is_toml_key(line, event))
+            && line.contains("herdr-agent-state")
+        {
+            removed_block = true;
             continue;
         }
         lines.push(line.to_string());

@@ -65,6 +65,7 @@ fn enforce_agent_version_warns_when_binary_missing() {
 #[cfg(unix)]
 #[test]
 fn enforce_agent_version_rejects_old_version() {
+    let _lock = integration_env_lock();
     let requirement = AgentVersionRequirement {
         label: "kimi code",
         binary: "echo",
@@ -81,6 +82,7 @@ fn enforce_agent_version_rejects_old_version() {
 #[cfg(unix)]
 #[test]
 fn enforce_agent_version_accepts_current_version() {
+    let _lock = integration_env_lock();
     let requirement = AgentVersionRequirement {
         label: "kimi code",
         binary: "echo",
@@ -104,6 +106,7 @@ fn clear_integration_path_env() {
     std::env::remove_var(CURSOR_CONFIG_DIR_ENV_VAR);
     std::env::remove_var(GROK_CONFIG_DIR_ENV_VAR);
     std::env::remove_var(GROK_HOME_ENV_VAR);
+    std::env::remove_var(JCODE_CONFIG_DIR_ENV_VAR);
 }
 
 fn kimi_hook_command(hook_path: &Path, action: &str) -> String {
@@ -1596,6 +1599,170 @@ fn install_kimi_errors_when_config_dir_missing() {
     let _ = fs::remove_dir_all(base);
 }
 
+fn jcode_config_hooks(config: &str) -> toml::Table {
+    let parsed: toml::Value = toml::from_str(config).unwrap();
+    parsed
+        .get("hooks")
+        .and_then(toml::Value::as_table)
+        .cloned()
+        .unwrap_or_default()
+}
+
+#[test]
+fn install_jcode_writes_hook_and_updates_config() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let home = base.join("home");
+    let jcode_dir = home.join(".jcode");
+    fs::create_dir_all(&jcode_dir).unwrap();
+    fs::write(
+        jcode_dir.join("config.toml"),
+        "theme = \"dark\"\n\n[hooks]\npre_tool_timeout_ms = 10000\nsession_start = \"echo existing\"\n",
+    )
+    .unwrap();
+    std::env::set_var("HOME", &home);
+
+    let installed = install_jcode().unwrap();
+    let hook_content = fs::read_to_string(&installed.hook_path).unwrap();
+    let config = fs::read_to_string(&installed.config_path).unwrap();
+    let hooks = jcode_config_hooks(&config);
+
+    assert_eq!(
+        installed.hook_path,
+        jcode_dir.join("hooks").join(JCODE_HOOK_INSTALL_NAME)
+    );
+    assert_eq!(installed.config_path, jcode_dir.join("config.toml"));
+    assert_eq!(hook_content, JCODE_HOOK_ASSET);
+    assert!(config.contains("theme = \"dark\""));
+    assert!(config.contains("[hooks]"));
+    assert!(config.contains("pre_tool_timeout_ms = 10000"));
+    assert!(config.contains(JCODE_CONFIG_BLOCK_BEGIN));
+    assert!(config.contains(JCODE_CONFIG_BLOCK_END));
+    for event in JCODE_HOOK_EVENTS {
+        assert_eq!(
+            hooks.get(event).and_then(toml::Value::as_str),
+            Some(installed.hook_path.to_str().unwrap()),
+            "expected jcode {event} hook to point at the installed script"
+        );
+    }
+    // The pre-existing session_start value must have been replaced, not
+    // duplicated, so jcode's one-command-per-event table stays valid.
+    assert!(!config.contains("echo existing"));
+
+    std::env::remove_var("HOME");
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn install_jcode_uses_jcode_config_dir_env() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let jcode_dir = base.join("custom-jcode");
+    fs::create_dir_all(&jcode_dir).unwrap();
+    std::env::set_var(JCODE_CONFIG_DIR_ENV_VAR, &jcode_dir);
+
+    let installed = install_jcode().unwrap();
+
+    assert_eq!(
+        installed.hook_path,
+        jcode_dir.join("hooks").join(JCODE_HOOK_INSTALL_NAME)
+    );
+    assert_eq!(installed.config_path, jcode_dir.join("config.toml"));
+
+    clear_integration_path_env();
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn install_jcode_is_idempotent_for_config_block() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let home = base.join("home");
+    let jcode_dir = home.join(".jcode");
+    fs::create_dir_all(&jcode_dir).unwrap();
+    std::env::set_var("HOME", &home);
+
+    install_jcode().unwrap();
+    install_jcode().unwrap();
+
+    let config = fs::read_to_string(jcode_dir.join("config.toml")).unwrap();
+    let hooks = jcode_config_hooks(&config);
+
+    assert_eq!(config.matches(JCODE_CONFIG_BLOCK_BEGIN).count(), 1);
+    assert_eq!(config.matches(JCODE_CONFIG_BLOCK_END).count(), 1);
+    assert_eq!(hooks.len(), JCODE_HOOK_EVENTS.len());
+    for event in JCODE_HOOK_EVENTS {
+        assert_eq!(
+            hooks.get(event).and_then(toml::Value::as_str),
+            Some(jcode_dir.join("hooks").join(JCODE_HOOK_INSTALL_NAME).to_str().unwrap()),
+            "expected jcode {event} hook to remain wired"
+        );
+    }
+
+    std::env::remove_var("HOME");
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn uninstall_jcode_removes_hook_and_config_block_preserves_other_hooks() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let home = base.join("home");
+    let jcode_dir = home.join(".jcode");
+    fs::create_dir_all(&jcode_dir).unwrap();
+    std::env::set_var("HOME", &home);
+
+    let installed = install_jcode().unwrap();
+    // jcode's [hooks] is a scalar table: one command per event, so herdr
+    // takes over the four lifecycle events inside a begin/end block while
+    // user keys (pre/post tool) live alongside and must survive uninstall.
+    let hook_path = installed.hook_path.display().to_string();
+    fs::write(
+        &installed.config_path,
+        format!(
+            "theme = \"dark\"\n\n[hooks]\npre_tool = \"echo pre\"\npost_tool_timeout_ms = 3000\n\n# >>> herdr jcode integration\nsession_start = \"{hook_path}\"\nturn_start = \"{hook_path}\"\nturn_end = \"{hook_path}\"\nsession_end = \"{hook_path}\"\n# <<< herdr jcode integration\n"
+        ),
+    )
+    .unwrap();
+
+    let result = uninstall_jcode().unwrap();
+    let config = fs::read_to_string(jcode_dir.join("config.toml")).unwrap();
+    let hooks = jcode_config_hooks(&config);
+
+    assert!(result.removed_hook_file);
+    assert!(result.updated_config);
+    assert!(!result.hook_path.exists());
+    assert!(config.contains("theme = \"dark\""));
+    assert!(config.contains("pre_tool = \"echo pre\""));
+    assert!(config.contains("post_tool_timeout_ms = 3000"));
+    assert!(!config.contains(JCODE_CONFIG_BLOCK_BEGIN));
+    assert!(!config.contains(JCODE_CONFIG_BLOCK_END));
+    assert_eq!(hooks.len(), 2);
+    assert_eq!(
+        hooks.get("pre_tool").and_then(toml::Value::as_str),
+        Some("echo pre")
+    );
+
+    std::env::remove_var("HOME");
+    let _ = fs::remove_dir_all(base);
+}
+
+#[test]
+fn install_jcode_errors_when_config_dir_missing() {
+    let _lock = integration_env_lock();
+    let base = unique_base();
+    let home = base.join("home");
+    fs::create_dir_all(&home).unwrap();
+    std::env::set_var("HOME", &home);
+
+    let err = install_jcode().unwrap_err().to_string();
+
+    assert!(err.contains("jcode config directory not found"));
+
+    std::env::remove_var("HOME");
+    let _ = fs::remove_dir_all(base);
+}
+
 #[test]
 fn install_copilot_writes_hook_and_updates_settings() {
     let _lock = integration_env_lock();
@@ -2651,6 +2818,8 @@ fn bundled_integration_asset_versions_match_expected_versions() {
             MASTRACODE_HOOK_ASSET,
             MASTRACODE_INTEGRATION_VERSION,
         ),
+        ("grok", GROK_HOOK_ASSET, GROK_INTEGRATION_VERSION),
+        ("jcode", JCODE_HOOK_ASSET, JCODE_INTEGRATION_VERSION),
     ] {
         assert_eq!(
             parse_integration_version(asset),
@@ -2780,6 +2949,13 @@ fn bundled_integration_assets_report_session_refs() {
     assert!(GROK_HOOK_ASSET.contains("herdr:grok"));
     assert!(!GROK_HOOK_ASSET.contains("\"state\":"));
     assert!(!GROK_HOOK_ASSET.contains("pane.release_agent"));
+    assert!(JCODE_HOOK_ASSET.contains("HERDR_INTEGRATION_ID=jcode"));
+    assert!(JCODE_HOOK_ASSET.contains("JCODE_HOOK_EVENT"));
+    assert!(JCODE_HOOK_ASSET.contains("agent_session_id"));
+    assert!(JCODE_HOOK_ASSET.contains("pane.report_agent_session"));
+    assert!(JCODE_HOOK_ASSET.contains("session_start_source"));
+    assert!(JCODE_HOOK_ASSET.contains("pane.report_agent"));
+    assert!(JCODE_HOOK_ASSET.contains("pane.release_agent"));
 }
 
 #[test]

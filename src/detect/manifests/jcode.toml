@@ -1,0 +1,91 @@
+id = "jcode"
+version = "2026.07.31.1"
+min_engine_version = 1
+updated_at = "2026-07-31T00:00:00Z"
+
+# jcode renders two bottom-of-screen signals while a turn is in flight:
+#
+#   1. The input prompt switches from "> " (idle) to "… " (processing) for
+#      the whole turn, including streaming and long-running tools.
+#   2. The status line just above the input shows an animated braille
+#      spinner plus a phase label (" sending…", " thinking…", " connecting…",
+#      " Rate limited. Auto-retry in ...", " network disconnected, waiting
+#      to retry ..."), or live token counters while streaming
+#      (" · ↑1.2k ↓340", " · 12.3 tps"), or a tool progress bar
+#      ("● · <tool> · ● · 12s").
+#
+# jcode has no human-approval blocking state in the TUI (tool calls are
+# autonomous), so there are no "blocked" rules; unmatched states fall back
+# to Idle.
+
+[[rules]]
+id = "processing_prompt"
+state = "working"
+priority = 300
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+line_regex = ['^\s*…\s']
+
+[[rules]]
+id = "sending_status"
+state = "working"
+priority = 200
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+contains = ["sending…"]
+
+[[rules]]
+id = "thinking_status"
+state = "working"
+priority = 200
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+contains = ["thinking…"]
+
+[[rules]]
+id = "connecting_status"
+state = "working"
+priority = 200
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+regex = ['\s(connecting|refreshing auth|sending context|waiting for response|retrying \d+/\d+|streaming)…\s']
+
+[[rules]]
+id = "rate_limited_status"
+state = "working"
+priority = 200
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+contains = ["Rate limited. Auto-retry"]
+
+[[rules]]
+id = "waiting_for_network_status"
+state = "working"
+priority = 200
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+contains = ["network disconnected, waiting to retry"]
+
+[[rules]]
+id = "streaming_token_counters"
+state = "working"
+priority = 150
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+regex = ['·\s*↑\d[\d.,k]*\s+↓\d[\d.,k]*']
+
+[[rules]]
+id = "streaming_tps"
+state = "working"
+priority = 150
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+regex = ['·\s*\d+\.\d+\s*tps']
+
+[[rules]]
+id = "running_tool_bar"
+state = "working"
+priority = 100
+region = "bottom_non_empty_lines(4)"
+visible_working = true
+regex = ['●\s*·\s*.{1,48}?\s*·\s*●\s*·\s*\d+\.?\d*\s*(s|m|h)']

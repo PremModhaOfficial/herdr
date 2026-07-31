@@ -23,6 +23,7 @@ pub(crate) fn integration_target_label(
         crate::api::schema::IntegrationTarget::Cursor => "cursor",
         crate::api::schema::IntegrationTarget::Mastracode => "mastracode",
         crate::api::schema::IntegrationTarget::Grok => "grok",
+        crate::api::schema::IntegrationTarget::Jcode => "jcode",
     }
 }
 
@@ -51,6 +52,7 @@ pub(crate) fn integration_target_command_names(
         crate::api::schema::IntegrationTarget::Cursor => cursor_command_names(),
         crate::api::schema::IntegrationTarget::Mastracode => &["mastracode"],
         crate::api::schema::IntegrationTarget::Grok => &["grok"],
+        crate::api::schema::IntegrationTarget::Jcode => &["jcode"],
     }
 }
 
@@ -259,7 +261,7 @@ fn integration_specs() -> [(
     crate::api::schema::IntegrationTarget,
     io::Result<PathBuf>,
     u32,
-); 15] {
+); 16] {
     [
         (
             crate::api::schema::IntegrationTarget::Pi,
@@ -338,6 +340,11 @@ fn integration_specs() -> [(
             crate::api::schema::IntegrationTarget::Grok,
             grok_dir().map(|dir| dir.join("hooks").join(super::GROK_HOOK_INSTALL_NAME)),
             super::GROK_INTEGRATION_VERSION,
+        ),
+        (
+            crate::api::schema::IntegrationTarget::Jcode,
+            jcode_dir().map(|dir| dir.join("hooks").join(super::JCODE_HOOK_INSTALL_NAME)),
+            super::JCODE_INTEGRATION_VERSION,
         ),
     ]
 }
